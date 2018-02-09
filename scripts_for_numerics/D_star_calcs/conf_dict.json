@@ -1,0 +1,120 @@
+{
+    "foam_extend_version" : "3.2",
+    "run_calc_in_allrun" : "true",
+    "bubble" :  {
+                    "Rstart" : 25e-6,
+                    "Rn" : 184e-6,
+                    "Rmax" : 495e-6,
+                    "D_init" : 668.25e-6,
+                    "D_star" : 1.35,
+                    "aimedRn" : 184e-6,
+                    "tTransit" : 50e-6
+                },
+    "decompose" : {
+                    "decompose" : "true",
+                    "xyz" : "5 6 1",
+                    "threads" : 30,
+                    "method" : "simple"
+                  },
+    "controlDict" : {
+                    "startTime" : 0,
+                    "endTime" : 665.640e-6,
+                    "deltaT" : 1e-12,
+                    "writeControl" : "timeStep",
+                    "writeInterval" : 20,
+                    "maxDeltaT" : 1e-6,
+                    "maxAcousticCo" : 1.0,
+                    "machSwitch" : 6e-1,
+                    "radiusRatioSwitchToAcousticCo" : 0.2,
+                    "maxCo" : 0.2,
+                    "maxAlphaCo" : 0.1,
+                    "printInfos" : "true"
+                    },
+    "mapFields" :  {
+                    "mapFields" : "false",
+                    "sourceDir" : "../0045_91_lbPaper_RC_1.35",
+                    "options" : ""
+                   },
+    "transportProperties" : {
+                                "sigma" : 0.0725,
+                                "psiZero" : 1e-16,
+                                "Tref" : 293.15,
+                                "gasConstGeneral" : 8.3144621,
+                                "pV" : 0.0,
+                                "notes" : "sigma=0.0725"
+                            },
+    "gas" : {
+                    "gamma" : 1.4,
+                    "mu" : 18.6e-6,
+                    "beta" : 0.00154011027003978,
+                    "specGasConst" : 287.0,
+                    "pMin" : 2.5,
+                    "notes" : "mu=18.6e-6, beta=0.00154011027003978"
+            },
+    "liquid" : {
+                    "gamma" : 7.15,
+                    "mu" : 1.002e-3,
+                    "B" : 305e6,
+                    "pInf" : 101315,
+                    "rho" : 998.20608789369,
+                    "notes" : "mu=1.002e-3, gamma=7.15, B=3046e5"
+                    },
+    "mesh" : {
+                    "meshFile" : "blockMeshDict_axisymm_cartesian_cyl.m4",
+                    "cellSize" : 1.5e-6,
+                    "numPer90deg" : 180,
+                    "numPer45deg" : 45,
+                    "FactorBubbleDomainRmax" : 1.01,
+                    "domainSizeFactorRmax" : 100,
+                    "meshCoreSize" : 20e-6,
+                    "refineMesh" : "false",
+                    "NoRefineSteps" : 2
+                    },
+    "funkySetFields" : {
+                    "U_interface" : 0.0,
+                    "pressureProfile" : "hom",
+                    "Uprofile" : "zero",
+                    "widthOfInterface" : 10e-7,
+                    "cellSizeFactorInterface" : 3.5,
+                    "notes" : "pressureProfile=hom/mirrorbubble/developed, Uprofile=zero/mirrorbubble/wicked"
+                    },
+    "solverControls" : {
+                    "solver" : "localMassCorr_working_opt",
+                    "solverDir" : "localMassCorr_working",
+                    "transonic" : "false",
+                    "nOuterCorrectors" : 1,
+                    "nCorrectors" : 2,
+                    "nNonOrthogonalCorrectors" : 1,
+                    "cAlpha" : 1,
+                    "nAlphaCorr" : 2,
+                    "nAlphaSubCycles" : 5,
+                    "alpha2TildeMin" : 1e-6,
+                    "MassCorr" : "local",
+                    "gmcInPISO" : "true",
+                    "applyDgdtCut" : "true",
+                    "psiAlteration" : "true",
+                    "calcEOSinPEqn" : "true",
+                    "predictor" : "false"
+                    },
+    "schemes" : {
+                    "ddt" : "Euler",
+                    "grad" : "Gauss skewCorrected linear",
+                    "div" : "Gauss vanLeer phi",
+                    "alpha2div" : "Gauss interfaceCompression",
+                    "laplacian" : "Gauss skewCorrected linear corrected",
+                    "interpolation" : "linear",
+                    "snGrad" : "none",
+                    "Alpha1SnGrad" : "limited 0.5 skewCorrected",
+                    "prghsnGrad" : "limited 0.8 skewCorrected"
+                },
+    "otherControls" : {
+                    "restrictU" : "false",
+                    "limitAlpha" : "true",
+                    "decayWicked" : 120e-6,
+                    "dxMinHalf" : 2e-6,
+                    "refineRadius" : 400e-6,
+                    "coreRim" : 10e-6,
+                    "useConstantTheta" : "false",
+                    "constantTheta" : 2.0
+                    }
+}

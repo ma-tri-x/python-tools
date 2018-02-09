@@ -1,0 +1,72 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  2.0.1                                 |
+|   \\  /    A nd           | Web:      www.OpenFOAM.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      fvSchemes;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+ddtSchemes
+{
+    default         Euler;
+}
+
+gradSchemes
+{
+    default         Gauss skewCorrected linear;
+}
+
+divSchemes
+{
+    default            Gauss vanLeer phi;
+     div(phiAlpha2,rho_gTilde)  Gauss interfaceCompression;
+}
+     //div(phirb,alpha) Gauss interfaceCompression;
+     //div(phiAlpha2,rho_gTilde)  Gauss upwind;
+
+// /*divSchemes
+// {
+//     default            Gauss vanLeer;
+//     div(phi,alpha)   Gauss interfaceCompression; //alphaScheme
+//     div(phirb,alpha) Gauss interfaceCompression; //alpharScheme
+//     flux(phiCalpha) Gauss interfaceCompression;
+// }*/
+
+
+laplacianSchemes
+{
+    default         Gauss skewCorrected linear corrected; 
+}
+
+interpolationSchemes
+{
+    default         linear;
+//     default         Gamma phi 0.7;
+}
+snGradSchemes
+{
+    default              none;
+    snGrad(rho)          limited 0.8 skewCorrected;
+    snGrad(alpha1)       limited 0.5 skewCorrected;
+    snGrad(p_rgh)        limited 0.8 skewCorrected;
+}
+
+fluxRequired
+{
+    default              none;
+    p_rgh;
+    sumP_rgh;
+    alpha1;
+}
+
+
+// ************************************************************************* //

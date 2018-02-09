@@ -1,0 +1,254 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  2.0.0                                 |
+|   \\  /    A nd           | Web:      www.OpenFOAM.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+
+FoamFile
+{
+    version         2.0;
+    format          ascii;
+ 
+    root            "";
+    case            "";
+    instance        "";
+    local           "";
+ 
+    class           dictionary;
+    object          blockMeshDict;
+}
+ 
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+ 
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+// * * * * * * * 2017-12-21 Max Koch acoustic bubble   * * * * * * * * * * * //
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+// * * * * * * * * * * * * * *wall * * * * * * * * * * * * * * * * * * * * * //
+// * * * * * * * * * * lT* ______ ________ RT* * * * * * * * * * * * * * * * //
+// * * * * * * * * * * * * | * * | rT* * *|* ^ XF* * * * * * * * * * * * * * //
+// * * * * * * * * * * * * | C * | * * D *|* | * * * * * * * * * * * * * * * //
+// * * * * * * * * * * lt* ------|--------|* ^ Y * * * * * * * * * * * * * * //
+// * * * * * * * * * * * * |_* * | * * * *|* | * * * * * * * * * * * * * * * //
+// * * * * * * * * *axis * |_) A | * * B *|* | wave-transmissive * * * * * * //
+// * * * * * * * * * * * * | * * | rd  * *|* | * Rd  * * * * * * * * * * * * //
+// * * * * * * * * * * ld* ------|--------|* ^ Ymin* * * * * * * * * * * * * //
+// * * * * * * * * * * * * | F * | * * E *|* | * * * * * * * * * * * * * * * //
+// * * * * * * * * * * * * | * * | * * * *|* | * * * * * * * * * * * * * * * //
+// * * * * * * * * * * lD* |_____|rD______|* 0 * * * * * * * * * * * * * * * //
+// * * * * * * * * * * * * wall* * * * * RD* * * * * * * * * * * * * * * * * //
+// * * * * * * * * * * * * 0 ->  X ------> XF* * * * * * * * * * * * * * * * //
+
+
+changecom(//)changequote([,])
+ 
+define(calc, [esyscmd(perl -e 'use Math::Trig; use Math::Round; printf ($1)')])
+define(PI, 3.14159265358979323846264338327950288)
+
+//# define function to get circle point coordinates when having origin in (0 0 0)
+//# GCP = getCirclePoint
+//# GCPx = R * cos(phi [deg]) * cos(theta [rad]
+define(GCPx, [calc(($1)*cos( ($2)/180.*PI ) *cos(($3)/180.*PI))])
+define(GCPy, [calc(($1)*sin( ($2)/180.*PI ))])
+define(GCPz, [calc(($1)*cos( ($2)/180.*PI ) *sin(($3)/180.*PI))])
+
+define(VCOUNT, 0)
+ 
+define(vlabel, [[// ]Vertex $1 = VCOUNT define($1, VCOUNT)define([VCOUNT], incr(VCOUNT))])
+
+convertToMeters 1;
+
+
+
+
+//# parameters that drive the mesh:
+define(wd, _BUBBLE-D_INIT)              // distance of bubble center to rigid wall (only for comparison)
+define(Rmax, _BUBBLE-RMAX)
+define(X, calc(_MESH-FACTORBUBBLEDOMAINRMAX * Rmax))                     // bubble domain im (domain B)
+define(XF,calc(_MESH-DOMAINSIZEFACTORRMAX * Rmax))              // mesh end (domain C)
+define(cellsize, _MESH-CELLSIZE)      // angular number of cells in B domain
+define(gradFactor, _MESH-GRADINGFACTOR)
+
+
+
+//################### domain A
+define(theta, calc(atan(0.5*cellsize/X)/PI*180.))
+define(Y, calc(wd + Rmax + 15e-6))
+define(Ymin, calc(wd - Rmax - 15e-6))
+define(AnumX, calc(round(X/cellsize)))
+define(AnumY, calc(round((Y-Ymin)/cellsize)))
+
+//################### domain B
+//# length of B domain
+define(l_B, calc(XF-X)) 
+//# grading of B domain
+define(Bgrd,calc(gradFactor*XF/X)) 
+//# computing radial number of cells
+define(logargB, calc((cellsize/l_B-1.)/(cellsize/l_B*Bgrd - 1.)))
+define(_Bnum, calc(1+log(Bgrd)/log(logargB)  ))
+define(BnumX, calc(round(_Bnum)))
+define(BnumY, AnumY)
+
+//################### domain C
+//# length of B domain
+define(l_C, calc(XF-Y)) 
+//# grading of B domain
+define(Cgrd,calc(gradFactor*XF/Y)) 
+//# computing radial number of cells
+define(logargC, calc((cellsize/l_C-1.)/(cellsize/l_C*Cgrd - 1.)))
+define(_Cnum, calc(1+log(Cgrd)/log(logargC)  ))
+define(CnumY, calc(round(_Cnum)))
+define(CnumX, AnumX)
+
+//################### domain F
+//# length of B domain
+define(l_F, calc(Ymin-cellsize)) 
+//# grading of B domain
+define(Fgrd,calc(gradFactor)) 
+//# computing radial number of cells
+define(logargF, calc((cellsize/l_F-1.)/(cellsize/l_F*Fgrd - 1.)))
+define(_Fnum, calc(1+log(Fgrd)/log(logargF)  ))
+define(FnumY, calc(round(_Fnum)))
+define(FnumX, AnumX)
+
+//################### domain D
+define(DnumX, BnumX)
+define(DnumY, CnumY)
+
+//################### domain E
+define(EnumX, BnumX)
+define(EnumY, FnumY)
+
+//# l=left,r=right,f=front,b=back,t=top,d=down; Teildomänen durchnummeriert von oben nach unten
+//# Reihenfolge: domain-nummer-left/right-top/down-front/back
+vertices
+(
+
+    (                    0              0                     0)      vlabel(lDf)
+    (                    0              0                     0)      vlabel(lDb)
+                                          
+    (GCPx(X  ,  0., theta)              0 GCPz(X  ,  0., theta))      vlabel(rDf)
+    (GCPx(X  ,  0., theta)              0 GCPz(X  ,  0.,-theta))      vlabel(rDb)
+    
+    (GCPx(XF ,  0., theta)              0 GCPz(XF ,  0., theta))      vlabel(RDf)
+    (GCPx(XF ,  0., theta)              0 GCPz(XF ,  0.,-theta))      vlabel(RDb)
+    
+    (                    0           Ymin                     0)      vlabel(ldf)
+    (                    0           Ymin                     0)      vlabel(ldb)
+    
+    (GCPx(X  ,  0., theta)           Ymin GCPz(X  ,  0., theta))      vlabel(rdf)
+    (GCPx(X  ,  0., theta)           Ymin GCPz(X  ,  0.,-theta))      vlabel(rdb)
+    
+    (GCPx(XF ,  0., theta)           Ymin GCPz(XF ,  0., theta))      vlabel(Rdf)
+    (GCPx(XF ,  0., theta)           Ymin GCPz(XF ,  0.,-theta))      vlabel(Rdb)
+    
+    (                    0              Y                     0)      vlabel(ltf)
+    (                    0              Y                     0)      vlabel(ltb)
+                                                                              
+    (GCPx(X  ,  0., theta)              Y GCPz(X  ,  0., theta))      vlabel(rtf)
+    (GCPx(X  ,  0., theta)              Y GCPz(X  ,  0.,-theta))      vlabel(rtb)
+                                                                              
+    (GCPx(XF ,  0., theta)              Y GCPz(XF ,  0., theta))      vlabel(Rtf)
+    (GCPx(XF ,  0., theta)              Y GCPz(XF ,  0.,-theta))      vlabel(Rtb)
+    
+    (                    0             XF                     0)      vlabel(lTf)
+    (                    0             XF                     0)      vlabel(lTb)
+
+    (GCPx(X  ,  0., theta)             XF GCPz(X  ,  0., theta))      vlabel(rTf)
+    (GCPx(X  ,  0., theta)             XF GCPz(X  ,  0.,-theta))      vlabel(rTb)
+
+    (GCPx(XF ,  0., theta)             XF GCPz(XF ,  0., theta))      vlabel(RTf)
+    (GCPx(XF ,  0., theta)             XF GCPz(XF ,  0.,-theta))      vlabel(RTb)
+);
+ 
+blocks
+(
+  hex (ldf rdf rdb ldb  ltf rtf rtb ltb)  (AnumX 1 AnumY) simpleGrading (   1 1             1) //# A
+  hex (rdf Rdf Rdb rdb  rtf Rtf Rtb rtb)  (BnumX 1 BnumY) simpleGrading (Bgrd 1             1) //# B
+  hex (ltf rtf rtb ltb  lTf rTf rTb lTb)  (CnumX 1 CnumY) simpleGrading (   1 1          Cgrd) //# C
+  hex (rtf Rtf Rtb rtb  rTf RTf RTb rTb)  (DnumX 1 DnumY) simpleGrading (Bgrd 1          Cgrd) //# D
+  hex (rDf RDf RDb rDb  rdf Rdf Rdb rdb)  (EnumX 1 EnumY) simpleGrading (Bgrd 1 calc(1./Fgrd)) //# E
+  hex (lDf rDf rDb lDb  ldf rdf rdb ldb)  (FnumX 1 FnumY) simpleGrading (   1 1 calc(1./Fgrd)) //# F
+);
+
+
+edges                  
+(
+//   arc B1rdf  B1rtf  (GCPx(XF ,  80., theta) GCPy(XF ,  80.) GCPz(XF ,  80., theta))
+//   arc B1rdb  B1rtb  (GCPx(XF ,  80.,-theta) GCPy(XF ,  80.) GCPz(XF ,  80.,-theta))
+//                                                       
+//   arc B2rdf  B1rdf  (GCPx(XF ,  10., theta) GCPy(XF ,  10.) GCPz(XF ,  10., theta))   
+//   arc B2rdb  B1rdb  (GCPx(XF ,  10.,-theta) GCPy(XF ,  10.) GCPz(XF ,  10.,-theta))
+);
+ 
+patches
+(
+     wedge front
+     (    
+            (lDf rDf rdf ldf) //# F
+            (rDf RDf Rdf rdf) //# E
+            (ldf rdf rtf ltf) //# A
+            (rdf Rdf Rtf rtf) //# B
+            (ltf rtf rTf lTf) //# C
+            (rtf Rtf RTf rTf) //# D
+     )     
+           
+     
+     wedge back
+     (
+            (rDb lDb ldb rdb) //# F
+            (RDb rDb rdb Rdb) //# E
+            (rdb ldb ltb rtb) //# A
+            (rdb rtb Rtb Rdb) //# B
+            (rtb ltb lTb rTb) //# C
+            (Rtb rtb rTb RTb) //# D
+     )
+     
+     //#patch side
+     //#(            
+     //#)
+     
+     patch wall
+     (            
+            
+            (rDf lDf lDb rDb) //# F
+            (RDf rDf rDb RDb) //# E
+            
+            (lTf rTf rTb lTb) //# C
+            (rTf RTf RTb rTb) //# D
+     )
+     
+     patch wallside
+     (
+            (RDf RDb Rdb Rdf) //# E
+            (Rdf Rdb Rtb Rtf) //# B
+            (Rtf Rtb RTb RTf) //# D
+     )
+     
+     //#patch wall2
+     //#(            
+     //#)
+     
+     empty axis
+     (
+           (lDb lDf ldf ldb) //# F
+           (ldb ldf ltf ltb) //# A
+           (ltb ltf lTf lTb) //# C
+     )
+);   
+     
+
+mergePatchPairs
+(
+);                       
+
+//// cell width at Xi:
+//cw_Xi
+//// meaning a timestep of...
+//calc(0.4*cw_Xi/200)
+//// ... for 200 m/s at smallest cell and maxCo=0.4
+
+

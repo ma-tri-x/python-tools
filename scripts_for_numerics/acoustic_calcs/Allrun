@@ -1,0 +1,291 @@
+#!/bin/bash
+
+if [[ true = "true" ]]; then
+ parallel=true
+fi
+
+if [ $parallel ];then  bash decompose.sh 2 3 1 simple; fi
+
+. $WM_PROJECT_DIR/bin/tools/RunFunctions
+application=`getApplication`
+
+
+runRefineMesh ()
+{
+    #echo "Running refineMesh on $PWD"
+    refineMesh -dict > log.refineMesh 
+}
+
+### get solver commit version number: #####
+thisdir=$(pwd)
+if [[ $application == "localMassCorr_working" || $application == "localMassCorr_working_opt" ]]
+then
+    cd $WM_PROJECT_DIR/applications/solvers/multiphase/localMassCorr_working
+    version_number=$(git log | head -n 1 | sed "s/commit //g")
+    cd $thisdir
+    echo $version_number > solver_version_number.info
+fi
+###########################################
+
+      m4 constant/polyMesh/axisymm_acoustic_enhanced.m4 > constant/polyMesh/blockMeshDict
+meshFile=constant/polyMesh/axisymm_acoustic_enhanced.m4
+
+ echo -e "\ncopying 0/backup/ files..."
+ cp 0/backup/alpha1.org 0/alpha1
+ cp 0/backup/p.org 0/p_rgh
+ cp 0/backup/rho_gTilde.org 0/rho_gTilde
+#  cp 0/backup/rho_gTilde.org 0/rho2Tilde
+ cp 0/backup/rho_gSource.org 0/rho_gSource
+ cp 0/backup/U 0/U
+
+echo "blockMeshing..."
+blockMesh > blockMesh.log
+
+
+if [ "false" = "true" ]
+then
+    j=1
+    while [ -e system/cellSetDict.$j ] ; do
+        echo "refining step $j..."
+        cp system/cellSetDict.$j system/cellSetDict
+        runApplication cellSet
+        mv log.cellSet log.cellSet.$j
+        echo "refining mesh..."
+        runRefineMesh
+        cp -r $(python find_biggestNumber.py .)/polyMesh/* constant/polyMesh
+        rm -rf $(python find_biggestNumber.py .)
+        j=`expr $j + 1`
+    done
+fi
+    
+pVar="p_rgh"
+
+echo -e "\nsetting fields..."
+
+gamma=1.4
+Rn=5e-05
+pV=0.0
+pStat=101315
+sigma=0.0
+#BVAN=0.0000364 # m^3/mol
+muwater=0.015
+TEMPREF=293.15
+GASCONSTGENERAL=8.3144621 # J/mol K
+SPECGASCONST=287.0
+beta=0.00154011027004
+
+pn=$(m4 <<< "esyscmd(perl -e 'printf (${pStat} + 2.*${sigma}/${Rn} -${pV}  )')")
+RMax=0.0002
+R=0.0002
+width=1e-06 # width of interface
+Uif=0.0
+
+
+pAtMax=$(m4 <<< "esyscmd(perl -e 'printf (   ${pn}*((${Rn}**3. - ${beta}*${Rn}**3.)/(${RMax}**3. - ${beta}*${Rn}**3.))**${gamma}  )')")
+rho_n=$(m4 <<< "esyscmd(perl -e 'printf ( $pn/($SPECGASCONST*$TEMPREF*(1.-$beta))  )')")
+rho_min=$(m4 <<< "esyscmd(perl -e 'printf ( $rho_n * ($Rn/$RMax)**3. )')")
+Z=$(m4 <<< "esyscmd(perl -e 'printf (   (${RMax}/${R})**(3.)  )')")
+Q=$(m4 <<< "esyscmd(perl -e 'printf (   ${pn}*((${Rn}**3. - ${beta}*${Rn}**3.)/(${RMax}**3. - ${beta}*${Rn}**3.))**${gamma}  )')")
+# current pressure of Bubble (if you do not start at RMax)
+pBubble=$(m4 <<< "esyscmd(perl -e 'printf (   ${pn}*((${Rn}**3. - ${beta}*${Rn}**3.)/(${R}**3. - ${beta}*${Rn}**3.))**${gamma}  )')") #1e9 #$Q
+Pm=$(m4 <<< "esyscmd(perl -e 'printf ( ${pStat} + 2.*${sigma}/${R} + 4.*${muwater}*${Uif}/${R} -${pV})' )")
+
+
+
+nCells=$(grep "nCells" blockMesh.log)
+
+echo "p_n              = $pn      "
+echo "beta             = $beta    "
+echo "RMax             = $RMax    "
+echo "R                = $R       "
+echo "widthOfInterface = $width   "
+echo "Uif              = $Uif     "
+echo "pAtRMax          = $pAtMax  "
+echo "rho_n            = $rho_n   "
+echo "rho_min          = $rho_min "
+echo "Z                = $Z       "
+echo "Q                = $Q       "
+echo "pBubble          = $pBubble "
+echo "Pm               = $Pm      "
+echo $nCells
+
+time=0
+
+if [ "false" = "false" ]
+then
+    offset=0.0249452627389
+    dist=$offset
+
+    unit_vector="vector(pos().x,pos().y-$dist,pos().z)/\
+                (sqrt(pos().x*pos().x +\
+                    (pos().y-${dist})*(pos().y-${dist}) +\
+                        pos().z*pos().z))"
+    distance_vector="vector(pos().x,pos().y-$dist,pos().z)"
+    radial_distance="sqrt(pos().x*pos().x + \
+                    (pos().y-${dist})*(pos().y-${dist}) + pos().z*pos().z)"
+
+    funkySetFields -case . -field alpha1 -expression "0.5*(tanh(($radial_distance-${R})*5.9/${width})+1)"\
+                        -time $time -keepPatches >> setFields.log  #-condition 'pos().x <= 50e-6' 
+    funkySetFields -case . -field U      -expression "0.*vector(0,1,0)" -keepPatches -time $time >> setFields.log 
+
+    if [ "5e-05" != "" ]
+    then
+        aimedRn=5e-05
+        t_transit=3e-05
+        pAtMaxNew=$(m4 <<< "esyscmd(perl -e 'printf (   ${pn}*((${aimedRn}**3. - ${beta}*${aimedRn}**3.)/(${RMax}**3. - ${beta}*${aimedRn}**3.))**${gamma}  )')")
+        echo "pAtRMax_withNewRn= $pAtMaxNew"
+        rhoGsource_approx=$(m4 <<< "esyscmd(perl -e 'printf (  ${rho_n}*(1.-${aimedRn}**3/${Rn}**3)/${t_transit}  )' )")
+        echo "rho_gSource      = ${rhoGsource_approx}"
+        funkySetFields -case . -field rho_gSource -expression "0.5*${rhoGsource_approx}*(1.-tanh(($radial_distance-${RMax})*5.9/${width}))"\
+                        -time $time -keepPatches >> setFields.log  #-condition 'pos().x <= 50e-6' 
+    fi
+
+    if [ "standing_wave_y" = "developed" ]
+    then
+        echo "---- using historically developed pressure profile ----"
+    #        (1.-alpha1)*${pBubble} + alpha1*
+        funkySetFields -case . -field $pVar  -expression "
+        (
+        ${R}/(-3.*$radial_distance)
+        * (  (${Q}*pow(${Z},${gamma})*(3.*${gamma}-4) + ${Q}*${Z})/(1-${gamma}) - (${Z}-4)*${Pm} )   
+        + ${pStat} 
+        - pow(${R},4) / (3.*pow($radial_distance,4)) * 
+        ( ${Pm}*(${Z}-1)-${Q}*(${Z} -pow(${Z},${gamma}))/(1-${gamma}) )
+        )"  -time $time -keepPatches -condition "$radial_distance >= ${R}" >> setFields.log
+
+        funkySetFields -case . -field $pVar  -expression "${pBubble}" -time $time -keepPatches -condition "
+        $radial_distance < ${R}" >> setFields.log
+        funkySetFields -case . -field $pVar  -expression "2.5" -time $time -keepPatches \
+                    -condition "${pVar} < 2.5" >> setFields.log
+    elif [ "standing_wave_y" = "standing_wave_x" ]
+    then
+        c=1671.0
+        echo "---- using standing_wave_x pressure profile ----"
+        funkySetFields -case . -field $pVar -expression "300000.0 * cos(2.*pi*pos().x/$c * 25120.0 )  +${pStat}"\
+                    -time $time -keepPatches >> setFields.log
+    elif [ "standing_wave_y" = "standing_wave_y" ]
+    then
+        c=1671.0
+        #XF=$(m4 <<< "esyscmd(perl -e 'printf(${RMax}*166.301751592)')")
+        echo "---- using standing_wave_y pressure profile ----"
+        #funkySetFields -case . -field $pVar -expression "300000.0 * cos(2.*pi*pos().y/$c * 25120.0 )* cos(pi*pos().x/(2.* $XF) ) +${pStat}"\
+        funkySetFields -case . -field $pVar -expression "alpha1* (300000.0 * cos(2.*pi*pos().y/$c * 25120.0 ) + ${pStat}) + (1.-alpha1)*${pBubble} "\
+                    -time $time -keepPatches >> setFields.log
+    else
+        echo "---- using theta jump pressure profile ----"
+        funkySetFields -case . -field $pVar -expression "${pBubble}*(1.-alpha1)+${pStat}*alpha1"\
+                    -time $time -keepPatches >> setFields.log
+    fi
+
+    ##############################################
+    dist=$offset
+    if [ "by_impedance_y" = "mirrorbubble" ]
+    then
+        echo "---- using Christianes U profile ----"
+        funkySetFields -case . -field U -expression "2.*${Uif}*${R}*${R}*$distance_vector/pow(pow(pos().x,2) + pow(pos().y-${dist},2) + pow(pos().z,2),1.5)" -condition "$radial_distance >= ${R}" -keepPatches -time $time >> setFields.log
+
+        funkySetFields -case . -field U -expression "${Uif}*( $distance_vector/(${R}) +         ${R}*${R}*$distance_vector/pow(pow(pos().x,2) + pow(pos().y+${dist},2) + pow(pos().z,2),1.5) )"             -condition "$radial_distance < ${R}"              -keepPatches -time $time >> setFields.log
+
+        #funkySetFields -case . -field ${pVar} -expression\
+        #"${pBubble}*(1.-alpha1)+alpha1*${pStat}" -time $time -keepPatches >> setFields.log
+    elif [ "by_impedance_y" = "wicked" ]
+    then
+        echo "---- using wicked U profile with decay 0.00012 ----"
+
+        funkySetFields -case . -field U -expression \
+            "${Uif}*$unit_vector*exp(-($radial_distance - $R)*2./0.00012)"\
+            -condition "$radial_distance >= ${R}" \
+            -keepPatches -time $time >> setFields.log
+
+        funkySetFields -case . -field U -expression \
+            "${Uif}/${R}*$distance_vector"\
+                -condition "$radial_distance < ${R}" \
+                -keepPatches -time $time >> setFields.log
+    elif [ "by_impedance_y" = "by_impedance" ]
+    then
+        rho=1574.0
+        echo "---- using U profile by sound impedance and phase difference pi/2. ----"
+        funkySetFields -case . -field U -expression \
+            "1./($rho * $c) *vector(1,0,0)* 300000.0 * cos(2.*pi*pos().x/$c * 25120.0  + pi/2.)" -keepPatches -time $time >> setFields.log
+    elif [ "by_impedance_y" = "by_impedance_y" ]
+    then
+        rho=1574.0
+        #XF=$(m4 <<< "esyscmd(perl -e 'printf(${RMax}*166.301751592)')")
+        echo "---- using U profile y by sound impedance and phase difference pi/2. ----"
+        funkySetFields -case . -field U -expression \
+            "alpha1*  (1./($rho * $c) *vector(0,1,0)* 300000.0 * cos(2.*pi*pos().y/$c * 25120.0  + pi/2.) ) + (1.-alpha1)*vector(0.,0.,0.) " -keepPatches -time $time >> setFields.log
+            #"1./($rho * $c) *vector(0,1,0)* 300000.0 * cos(2.*pi*pos().y/$c * 25120.0  + pi/2.)* cos(pi*pos().x/(2.* $XF) )" -keepPatches -time $time >> setFields.log
+    else
+        echo "---- using simple U profile where U > 0 ----"
+
+        funkySetFields -case . -field U -expression \
+            "${Uif}*$unit_vector*$R/\
+            pow($radial_distance,1.0)"\
+            -condition "$radial_distance >= ${R}" \
+            -keepPatches -time $time >> setFields.log
+
+        funkySetFields -case . -field U -expression \
+            "${Uif}/${R}*$distance_vector"\
+                -condition "$radial_distance < ${R}" \
+                -keepPatches -time $time >> setFields.log
+    fi
+    ###############################################
+
+else
+    startTime=0
+    sourceDir=../0045_91_lbPaper_RC_1.35
+    thisdir=$(pwd)
+    cd $sourceDir
+    reconstructPar -time $startTime > reconstruct.log
+    cd $thisdir
+    if [ ! -d $startTime ]
+    then 
+        mkdir $startTime
+        cp 0/* $startTime
+    fi
+    echo "---- mapping fields with $sourceDir  ........"
+    mapFields $sourceDir  > mapFields.log
+fi
+
+
+if [ $parallel ];then
+    echo "decomposing with xyz: 2 3 1 by method: simple"
+    decomposePar > decomposePar.log
+
+
+    if [ ! -d processor0/constant/polyMesh ]
+    then
+        echo "writing mesh to processor*/constant because it wasn't created..."
+        for coreDir in processor*; do 
+            mkdir -p $coreDir/constant
+            mv $coreDir/0/polyMesh $coreDir/constant
+            rm -rf $coreDir/0
+        done
+    fi
+
+
+    slots=$(grep "^numberOfSubdomains" system/decomposeParDict | sed "s/^numberOfSubdomains *\([0-9]*\);/\1/")
+    method=$( grep "^method" system/decomposeParDict | sed "s/^method *\([a-zA-Z]*\);/\1/")
+    echo "slots = ${slots}, decomposed with $method"
+fi
+
+    
+date
+if [ "true" == "true" ];then
+    if [ "true" = "true" ];then
+        echo "-- running in parallel --"
+        echo "mpirun -np $slots localMassCorr_working_opt -parallel > run.log #> /dev/null 2>&1 #> run.log"
+    mpirun -np $slots localMassCorr_working_opt -parallel 2>&1 > run.log  #> /dev/null 2>&1 #> run.log
+    else
+        echo "-- running on single core --"
+        $application > run.log #/dev/null 2>&1 #> run.log
+    fi
+    python copy_solver_here.py
+fi
+date
+
+ massFile=postProcessing/volumeIntegrate_volumeIntegral/0/rhoBubble
+ cp $massFile ${massFile}ForParaView
+ sed -i "s/#//g" ${massFile}ForParaView
+
+# ----------------------------------------------------------------- end-of-file

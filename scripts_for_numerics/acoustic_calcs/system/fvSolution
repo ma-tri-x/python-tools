@@ -1,0 +1,137 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  2.0.1                                 |
+|   \\  /    A nd           | Web:      www.OpenFOAM.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      fvSolution;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+
+solvers
+{
+//     alpha1
+//     {
+//         maxUnboundedness 1e-5;
+//         CoCoeff          2;
+//         maxIter          40;
+//         nLimiterIter     2;
+// 
+//         solver           PBiCG;
+//         preconditioner   DILU;
+//         tolerance        1e-14;
+//         relTol           0;
+//     };
+    
+    
+    "(U|rho_gTilde|rho2Tilde|rho_l|alpha2)"
+    {
+        solver           PBiCG;
+       //solver          PCG;
+       //  preconditioner
+       //  {
+       //      preconditioner  GAMG;
+       //      tolerance       0.001;
+       //      relTol          0;
+       //      smoother        GaussSeidel;
+       //      nPreSweeps      0;
+       //      nPostSweeps     2;
+       //      nBottomSweeps   2;
+       //      cacheAgglomeration false;
+       //      nCellsInCoarsestLevel 10;
+       //      agglomerator    faceAreaPair;
+       //      mergeLevels     1;
+       //  }
+        preconditioner   DILU;
+        tolerance        1e-14;
+        relTol           0;
+    }
+    
+    "(U|rho_gTilde|rho2Tilde|rho_l|alpha2)Final"
+    {
+        solver           PBiCG;
+        preconditioner   DILU;
+        tolerance        1e-14;
+        relTol           0;
+    }
+    
+    "(rhoFinal)"
+    {
+        solver           bla;
+        preconditioner   DILU;
+        tolerance        1e-20;
+        relTol           0;
+    }
+    
+    "(rho)"
+    {
+        $rhoFinal
+    }
+
+    p_rghFinal
+    {
+        solver           PCG; //BiCGStab;
+        preconditioner   DIC;
+//         solver           GMRES; //BiCGStab;
+//         solver           BiCGStab;
+//         preconditioner   DILU;
+//         nDirections      3;
+        tolerance        1e-14;
+//         tolerance        1e-20;
+        relTol           0;
+    };
+
+    p_rgh
+    {
+        $p_rghFinal;
+    };
+    
+    sumP_rgh
+    {
+        $p_rghFinal;
+    }
+    
+    sumP_rghFinal
+    {
+        $p_rghFinal;
+    }
+}
+
+mysolver
+{
+    transonic                  false;
+    nOuterCorrectors           1; //1;
+    nCorrectors                2; //2;
+    nNonOrthogonalCorrectors   0; //2;
+
+    cAlpha                     1; //1;
+    nAlphaCorr                 2; //2;
+    nAlphaSubCycles            5; //5;
+    
+    alpha2TildeMin             1e-06; //1e-6;
+    
+    usePsiAlteration           true;
+    applyDgdtCut               true;
+    corrMass                   local;
+    calcEOSderivatives_PISO    true;
+    momPredictor               false;
+    
+    restrictU               false;
+    limitAlpha              true;
+}
+
+PISO
+{
+    $mysolver
+}
+
+
+// ************************************************************************* //

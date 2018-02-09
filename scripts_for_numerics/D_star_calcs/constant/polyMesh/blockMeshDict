@@ -1,0 +1,180 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  2.0.0                                 |
+|   \\  /    A nd           | Web:      www.OpenFOAM.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+
+FoamFile
+{
+    version         2.0;
+    format          ascii;
+ 
+    root            "";
+    case            "";
+    instance        "";
+    local           "";
+ 
+    class           dictionary;
+    object          blockMeshDict;
+}
+ 
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+
+ 
+
+
+
+//# define function to get circle point coordinates when having origin in (0 0 0)
+//# GCP = getCirclePoint
+//# GCPx = R * cos(phi [deg]) * cos(theta [rad]
+
+
+
+
+
+ 
+
+
+convertToMeters 1;
+
+
+
+
+//# parameters that drive the mesh:
+              // distance of bubble center to rigid wall (only for comparison)
+
+                     // bubble domain im (domain B)
+              // mesh end (domain C)
+      // angular number of cells in B domain
+
+
+
+//################### domain A
+
+//_ALLRUN-OVERWRITETHETA
+
+
+
+
+
+
+//################### domain B
+//# length of B domain
+ 
+//# grading of B domain
+ 
+//# computing radial number of cells
+
+
+
+
+//# l=left,r=right,f=front,b=back,t=top,d=down; Teildomänen durchnummeriert von oben nach unten
+//# Reihenfolge: domain-nummer-left/right-top/down-front/back
+vertices
+(
+
+    (                    0              0                     0)      // Vertex A1ldf = 0 
+    (                    0              0                     0)      // Vertex A1ldb = 1 
+    
+    (                    0              0.00117825                     0)      // Vertex A1ltf = 2 
+    (                    0              0.00117825                     0)      // Vertex A1ltb = 3 
+    
+    (0.000499949437444694              0.00117825 7.49999156082649e-07)      // Vertex A1rtf = 4 
+    (0.000499949437444694              0.00117825 -7.49999156082649e-07)      // Vertex A1rtb = 5 
+    
+    (0.000499949437444694              0 7.49999156082649e-07)      // Vertex A1rdf = 6 
+    (0.000499949437444694              0 -7.49999156082649e-07)      // Vertex A1rdb = 7 
+    
+    (                    0             0.0495                     0)      // Vertex B1ltf = 8 
+    (                    0             0.0495                     0)      // Vertex B1ltb = 9 
+    
+    (0.000499949437444694             0.0495 7.49999156082649e-07)      // Vertex B1rtf = 10 
+    (0.000499949437444694             0.0495 -7.49999156082649e-07)      // Vertex B1rtb = 11 
+    
+    (0.0494999443014548             0.0495 7.42573421864009e-05)      // Vertex B2rtf = 12 
+    (0.0494999443014548             0.0495 -7.42573421864009e-05)      // Vertex B2rtb = 13 
+            
+    (0.0494999443014548              0.00117825 7.42573421864009e-05)      // Vertex B2rdf = 14 
+    (0.0494999443014548              0.00117825 -7.42573421864009e-05)      // Vertex B2rdb = 15 
+
+    (0.0494999443014548              0 7.42573421864009e-05)      // Vertex B3rdf = 16 
+    (0.0494999443014548              0 -7.42573421864009e-05)      // Vertex B3rdb = 17 
+);
+ 
+blocks
+(
+  hex (0 6 7 1   2 4 5 3)  (333 1 786) simpleGrading (1 1 1) //# A1
+                                                                   
+  //# B                                                            
+  hex (2 4 5 3   8 10 11 9)  (333 1  247) simpleGrading (   1 1 891.089108910891) //# B1
+  hex (4 14 15 5   10 12 13 11)  (247  1  247) simpleGrading (891.089108910891 1 891.089108910891) //# B2
+  hex (6 16 17 7   4 14 15 5)  (247  1 786) simpleGrading (891.089108910891 1    1) //# B3
+);
+
+
+edges                  
+(
+//   arc B1rdf  B1rtf  (GCPx(XF ,  80., theta) GCPy(XF ,  80.) GCPz(XF ,  80., theta))
+//   arc B1rdb  B1rtb  (GCPx(XF ,  80.,-theta) GCPy(XF ,  80.) GCPz(XF ,  80.,-theta))
+//                                                       
+//   arc B2rdf  B1rdf  (GCPx(XF ,  10., theta) GCPy(XF ,  10.) GCPz(XF ,  10., theta))   
+//   arc B2rdb  B1rdb  (GCPx(XF ,  10.,-theta) GCPy(XF ,  10.) GCPz(XF ,  10.,-theta))
+);
+ 
+patches
+(
+     wedge front
+     (    
+           (0 6 4 2) //#A1
+           
+           (2 4 10 8) //#B1
+           (4 14 12 10) //#B2
+           (6 16 14 4) //#B3
+     )     
+           
+
+     wedge back
+     (
+           (1 7 5 3) //#A1
+           
+           (3 5 11 9) //#B1
+           (5 15 13 11) //#B2
+           (7 17 15 5) //#B3
+     )
+     
+     patch side
+     (            
+            (8 10 11 9) //#B1
+            (10 12 13 11) //#B2
+            (14 15 13 12) //#B2
+            (16 17 15 14) //#B3
+     )
+     
+     patch wall
+     (            
+            (0 1 7 6) //#A1
+            (6 7 17 16) //#B3
+     )
+
+     empty axis
+     (
+           (1 0 2 3)
+           (3 2 8 9)
+     )
+);   
+     
+
+mergePatchPairs
+(
+);                       
+
+//// cell width at Xi:
+//cw_Xi
+//// meaning a timestep of...
+//calc(0.4*cw_Xi/200)
+//// ... for 200 m/s at smallest cell and maxCo=0.4
+
+
