@@ -3,7 +3,8 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-DEBUG=False
+DEBUG=True
+DEBUGADV=True
 
 class Ray(object):
     def __init__(self, startx, starty):
@@ -22,6 +23,10 @@ class Ray(object):
     def add_pos(self,x,y):
         self.x.append(x)
         self.y.append(y)
+        
+    def delete_last_pos(self):
+        self.x.pop()
+        self.y.pop()
 
 class Lens(object):
     def __init__(self, offset_x=0., n=1.75, h=1e-2):
@@ -47,11 +52,11 @@ class Lens(object):
         if DEBUG: print "ynn = {}".format(ynn)
         return ynn
     
-    def Newton_find_yzero(self, ray_inst, sidefunc):
+    def Newton_find_yzero(self, ray_inst, sidefunc, yn = 0.):
         if np.abs(ray_inst.ny) < 1e-10:
             return ray_inst.pos_y(-1)
         epsilon = 1e-4
-        yn = 0.
+        #
         ynn= self.Newtonstep(ray_inst,sidefunc,yn)
         while np.abs((ynn-yn)/(yn+1e-10)) > epsilon:
             yn = ynn
@@ -65,54 +70,74 @@ class Lens(object):
 
     def refract_ray_curved(self,ray_inst, water_x):
         for sidefunc in [self.left_x,self.right_x]:
-            if ray_inst.use:
+            if DEBUG: print "-- {}".format(sidefunc)
+            willhit=True
+            iteration = 0
+            while ray_inst.use and willhit:
                 yhit = self.Newton_find_yzero(ray_inst, sidefunc)
-                #if np.abs(yhit) > self.h/2. : ray_inst.add_pos(self.offset_x,yhit)
-                #else:
                 xhit = sidefunc(yhit)
-                lens_deriv_x = sidefunc(yhit+1e-6) - sidefunc(yhit-1e-6)
-                lens_tangential = np.array([lens_deriv_x,2e-6])
-                lens_tangential /= np.linalg.norm(lens_tangential)
-                lens_orthonormal = np.array([lens_tangential[1],-lens_tangential[0]])
-                if lens_orthonormal[0] > 1e-8: 
-                    lens_orthonormal *=-1
-                
-                if DEBUG: plt.arrow(xhit,yhit,lens_orthonormal[0]*1e-3,lens_orthonormal[1]*1e-3,head_width=0.,width=1e-4)
-                
-                nray = np.array([ray_inst.nx,ray_inst.ny])
-                angle_left = np.arccos(nray.dot(lens_orthonormal))
-                if angle_left > np.pi/2.: 
-                    angle_left = np.pi - angle_left
-                env_n = 1.0
-                if xhit > water_x: env_n = 1.333
-                ratio = env_n/self.n
-                if sidefunc == self.right_x: ratio = 1./ratio
-                if np.abs(ratio * np.sin(angle_left)) < 1.0:
-                    angle_2 = np.arcsin(ratio * np.sin(angle_left))
-                    angle_tilt = angle_left-angle_2
-                    nrot = np.array([0.,0.])
-                    if (nray+lens_orthonormal)[1] < 0.:
-                        nrot = self._rot_counterclock(-angle_tilt,nray)
-                    if (nray+lens_orthonormal)[1] >= 0.:
-                        nrot = self._rot_counterclock( angle_tilt,nray)
-                    ray_inst.nx = nrot[0]
-                    ray_inst.ny = nrot[1]
-                    ray_inst.add_pos(xhit,yhit)
-                else:
-                    angle_tilt = 2.*(np.pi/2. - angle_left)
-                    nrot = np.array([0.,0.])
-                    if (nray+lens_orthonormal)[1] < 0.:
-                        nrot = self._rot_counterclock( angle_tilt,nray)
-                    if (nray+lens_orthonormal)[1] >= 0.:
-                        nrot = self._rot_counterclock(-angle_tilt,nray)
-                    ray_inst.nx = nrot[0]
-                    ray_inst.ny = nrot[1]
-                    ray_inst.add_pos(xhit,yhit)
-                    ray_inst.add_pos(xhit+nrot[0]*1e-3,yhit+nrot[1]*1e-3)
-                    ray_inst.use = False
+                if np.abs(ray_inst.pos_x(-1) - xhit) < 1e-8:
+                    if DEBUG: print "- try next yhit"
+                    yn_new = np.sign(ray_inst.ny)*self.h/2.*0.9
+                    yhit_new = self.Newton_find_yzero(ray_inst, sidefunc, yn=yn_new)
+                    xhit_new = sidefunc(yhit_new)
+                    if np.abs(ray_inst.pos_x(-1) - xhit_new) < 1e-8: 
+                        willhit=False
+                    else:
+                        yhit = yhit_new
+                        xhit = xhit_new
+                    
+                if willhit:
+                    lens_deriv_x = sidefunc(yhit+1e-6) - sidefunc(yhit-1e-6)
+                    lens_tangential = np.array([lens_deriv_x,2e-6])
+                    lens_tangential /= np.linalg.norm(lens_tangential)
+                    lens_orthonormal = np.array([lens_tangential[1],-lens_tangential[0]])
+                    if lens_orthonormal[0] > 1e-8: 
+                        lens_orthonormal *=-1
+                    
+                    if DEBUG: plt.arrow(xhit,yhit,lens_orthonormal[0]*1e-3,lens_orthonormal[1]*1e-3,head_width=0.,width=1e-4)
+                    
+                    nray = np.array([ray_inst.nx,ray_inst.ny])
+                    angle_left = np.arccos(nray.dot(lens_orthonormal))
+                    if angle_left > np.pi/2.: 
+                        angle_left = np.pi - angle_left
+                    env_n = 1.0
+                    if xhit > water_x: env_n = 1.333
+                    ratio = env_n/self.n
+                    if np.mod(iteration,2) == 1: ratio = 1./ratio
+                    if sidefunc == self.right_x: ratio = 1./ratio
+                    if np.abs(ratio * np.sin(angle_left)) < 1.0:
+                        angle_2 = np.arcsin(ratio * np.sin(angle_left))
+                        angle_tilt = angle_left-angle_2
+                        nrot = np.array([0.,0.])
+                        if (nray+lens_orthonormal)[1] < 0.:
+                            nrot = self._rot_counterclock(-angle_tilt,nray)
+                        if (nray+lens_orthonormal)[1] >= 0.:
+                            nrot = self._rot_counterclock( angle_tilt,nray)
+                        if not np.abs(yhit) > self.h/2.:
+                            ray_inst.nx = nrot[0]
+                            ray_inst.ny = nrot[1]
+                        else:
+                            willhit = False
+                        ray_inst.add_pos(xhit,yhit)
+                        if DEBUGADV: plt.arrow(xhit,yhit,ray_inst.nx*1e-4,ray_inst.ny*1e-4,head_width=0.,width=0.3e-4,color="green")
+                        iteration += 1
+                    else:
+                        angle_tilt = 2.*(np.pi/2. - angle_left)
+                        nrot = np.array([0.,0.])
+                        if (nray+lens_orthonormal)[1] < 0.:
+                            nrot = self._rot_counterclock( angle_tilt,nray)
+                        if (nray+lens_orthonormal)[1] >= 0.:
+                            nrot = self._rot_counterclock(-angle_tilt,nray)
+                        ray_inst.nx = nrot[0]
+                        ray_inst.ny = nrot[1]
+                        ray_inst.add_pos(xhit,yhit)
+                        ray_inst.add_pos(xhit+nrot[0]*1e-3,yhit+nrot[1]*1e-3)
+                        if DEBUGADV: plt.arrow(xhit,yhit,ray_inst.nx*1e-4,ray_inst.ny*1e-4,head_width=0.,width=0.3e-4,color="red")
+                        ray_inst.use = False
             
     def plot_lens(self):
-        div = 20
+        div = 30
         lyl = range(div+1)
         ly = [-self.h/2. + k*self.h/div for k in lyl]
         lx = [self.left_x(y) for y in ly]
@@ -254,7 +279,7 @@ class Bubble(Lens):
         
         
 def main():
-    beam = Beam(width=1.9e-3,raycount = 10, water_x=-6e-3, startx=-6e-3, endx=10e-3)
+    beam = Beam(width=1.9e-3,raycount = 9, water_x=-6e-3, startx=-6e-3, endx=10e-3)
     h=0.0254
 
     #best_form_lens_f50_1inch = SphLLens(d=3.3e-3, Rl=0.172, Rr=30.1e-3)
