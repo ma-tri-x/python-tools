@@ -81,7 +81,9 @@ class Lens(object):
                 angle_left = np.pi - angle_left
             env_n = 1.0
             if xhit > water_x: env_n = 1.333
-            angle_2 = np.arcsin(env_n/self.n * np.sin(angle_left))
+            ratio = env_n/self.n
+            if sidefunc == self.right_x: ratio = 1./ratio
+            angle_2 = np.arcsin(ratio * np.sin(angle_left))
             angle_tilt = angle_left-angle_2
             nrot = np.array([0.,0.])
             if (nray+lens_orthonormal)[1] < 0.:
@@ -108,24 +110,25 @@ class AsphLens(Lens):
         self.k=-1.911
         self.A=5.0e-6
         self.d=30e-3
-        self.n=1.75
+        self.n=1.43
         self.offset_x = Lens().offset_x
         self.h = Lens().h
         
     def left_x(self,y):
-        x = (y*y/(self.R*(1.+np.sqrt(1.-(1.+self.k)*y*y/self.R/self.R))) + self.A*y*y*y*y)/17.8e-3*27.7e-3 + self.offset_x 
+        x = (y*y/(self.R*(1.+np.sqrt(1.-(1.+self.k)*y*y/self.R/self.R))) + self.A*y*y*y*y) + self.offset_x   #/17.8e-3*27.7e-3
         return x
     
     def right_x(self,y):
         return self.left_x(0.0) + self.d
     
 class SphLLens(Lens):
-    def __init__(self, Rl, d):
+    def __init__(self, Rl, Rr, d):
         self.info="some spherical lens"
         self.R=Rl
+        self.Rr=Rr
         self.d = d
         self.h = Lens().h
-        self.n=1.75
+        self.n=1.43
         self.offset_x=Lens().offset_x
         
     def left_x(self,y):
@@ -133,7 +136,26 @@ class SphLLens(Lens):
         return -posx
     
     def right_x(self,y):
-        return self.d + self.offset_x
+        if self.Rr=="inf":
+            return self.d + self.offset_x
+        else:
+            return np.sqrt(self.Rr*self.Rr - y*y) + self.d + self.offset_x - np.sqrt(self.Rr*self.Rr - self.h*self.h/4.)
+    
+class ParabLens(Lens):
+    def __init__(self, a, b, d):
+        self.info="some spherical lens"
+        self.a=a
+        self.b=b
+        self.d = d
+        self.h = Lens().h
+        self.n=1.43
+        self.offset_x=Lens().offset_x
+        
+    def left_x(self,y):
+        return self.a*y*y  + self.offset_x
+    
+    def right_x(self,y):
+        return self.d + self.a*(self.h/2.)**2 + self.offset_x + self.b*(self.h/2.)**2 - self.b*y*y
 
 class Beam(object):
     def __init__(self, width=5e-3, raycount=10, startx=-10e-3, water_x=0., endx=60e-3, debug=False):
@@ -190,25 +212,54 @@ class WaterLens(Beam,Lens):
     
     def right_x(self,y):
         return self.offset_x + self.d
+    
+    
+class Bubble(Lens):
+    def __init__(self, R=1e-3, offset_x=0.):
+        self.R = R
+        self.h = 2*R
+        self.n = 1.0
+        self.offset_x = offset_x
+            
+    def left_x(self,y):
+        if np.abs(y) > self.R: return self.offset_x
+        return self.offset_x - np.sqrt(self.R**2 - y*y)
+    
+    def right_x(self,y):
+        if np.abs(y) > self.R: return self.offset_x
+        return self.offset_x + np.sqrt(self.R**2 - y*y)
             
         
         
 def main():
-    beam = Beam(width=30e-3,raycount = 8, water_x=1., startx=-10e-3, endx=0.1)
-    h=0.07
-    somelens = SphLLens(d=1e-3, Rl=0.08)
-    somelens.h = h
-    somelens.offset_x = 4e-3
-    somelens.plot_lens()
-    beam.add_lens(somelens)
+    beam = Beam(width=2e-3,raycount = 8, water_x=-6e-3, startx=-6e-3, endx=10e-3)
+    h=0.0254
+
+    #best_form_lens_f50_1inch = SphLLens(d=3.3e-3, Rl=0.172, Rr=30.1e-3)
+    #best_form_lens_f50_1inch.h = h
+    #best_form_lens_f50_1inch.offset_x = 0.
+    #best_form_lens_f50_1inch.plot_lens()
+    #beam.add_lens(best_form_lens_f50_1inch)
+
+    #par = ParabLens(d=1e-3,a=20, b=0)
+    #par.h = h
+    #par.plot_lens()
+    #beam.add_lens(par)
     
     #asph = AsphLens()
-    #asph.offset_x=0.
-    #asph.h=0.075
+    #asph.offset_x=-30e-3
+    #asph.h=h
     #asph.plot_lens()
     #beam.add_lens(asph)
+
+    bubble = Bubble(R=1e-3)
+    bubble.plot_lens()
+    beam.add_lens(bubble)
     
     #wat = WaterLens()
+    #wat.h=h
+    #wat.offset_x=10e-3
+    #wat.d = 10e-3
     #wat.plot_lens()
     #beam.add_lens(wat)
 
